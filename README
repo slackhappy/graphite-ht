@@ -1,3 +1,8 @@
+ modified fork of graphite that can talk to a hypertable instance
+
+ to enable hypertable support add a line to your local settings.py
+ HYPERTABLE_SERVER=host:port
+ 
  Overview
 -------------------------------------------------------------------------------
 Graphite consists of two major components

@@ -40,6 +40,22 @@ from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 
+import threading
+
+class EvalThread (threading.Thread):
+  def __init__(self, requestContext, target):
+    self.requestContext = requestContext
+    self.target = target
+    self.seriesList = []
+    threading.Thread.__init__(self)
+
+  def run(self):
+    t = time()
+    self.seriesList = evaluateTarget(self.requestContext, self.target)
+    log.rendering("Retrieval of %s took %.6f" % (self.target, time() - t))
+
+  def getSeriesList(self):
+    return self.seriesList
 
 def renderView(request):
   start = time()
@@ -100,11 +116,16 @@ def renderView(request):
     if cachedData is not None:
       requestContext['data'] = data = cachedData
     else: # Have to actually retrieve the data now
+      threads = []
       for target in requestOptions['targets']:
-        t = time()
-        seriesList = evaluateTarget(requestContext, target)
-        log.rendering("Retrieval of %s took %.6f" % (target, time() - t))
-        data.extend(seriesList)
+        t = EvalThread(requestContext, target)
+        t.start()
+        threads.append(t)
+     
+      for t in threads:
+        t.join()
+      for t in threads:
+        data.extend(t.getSeriesList())
 
     if useCache:
       cache.set(dataKey, data, cacheTimeout)

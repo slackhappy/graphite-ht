@@ -12,12 +12,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
+import array
+import re
 import socket
 import struct
 import time
+import datetime
+from collections import defaultdict
 from django.conf import settings
 from graphite.logger import log
 from graphite.storage import STORE, LOCAL_STORE
+from graphite.hypertable_client import HyperTablePool, removePrefix, addPrefix
+from graphite.metrics.hypertable_search import HyperStore
+from hyperthrift.gen.ttypes import ScanSpec, CellInterval
 from graphite.render.hashing import ConsistentHashRing
 
 try:
@@ -36,7 +43,6 @@ class TimeSeries(list):
     self.consolidationFunc = consolidate
     self.valuesPerPoint = 1
     self.options = {}
-
 
   def __iter__(self):
     if self.valuesPerPoint > 1:
@@ -207,9 +213,85 @@ for host in settings.CARBONLINK_HOSTS:
 #A shared importable singleton
 CarbonLink = CarbonLinkPool(hosts, settings.CARBONLINK_TIMEOUT)
 
-
 # Data retrieval API
 def fetchData(requestContext, pathExpr):
+  return fetchDataFromHyperTable(requestContext, pathExpr)
+
+def fetchDataFromHyperTable(requestContext, pathExpr):
+  MIN_INTERVAL_SECS = 10
+  COL_INTERVAL_SECS = 60 * 60
+  if pathExpr.lower().startswith('graphite.'):
+    pathExpr = pathExpr[9:]
+
+  pathExpr = addPrefix(pathExpr)
+  metrics = [addPrefix(m) for m in HyperStore().find(pathExpr)]
+
+  startDateTime = requestContext['startTime']
+  endDateTime = requestContext['endTime']
+
+  start, end = int(timestamp(requestContext['startTime'])), int(timestamp(requestContext['endTime']))
+
+  startColString = startDateTime.strftime('metric:%Y-%m-%d %H')
+  endColString = endDateTime.strftime('metric:%Y-%m-%d %H')
+  cellIntervals = [ CellInterval(m, startColString, True, m, endColString, True) for m in metrics ]
+
+  nanosStart = start * 10**9L
+  nanosEnd = end * 10**9L
+
+  scan_spec = ScanSpec(None, None, None, 1)
+  scan_spec.start_time = nanosStart
+  scan_spec.end_time = nanosEnd
+  scan_spec.cell_intervals = cellIntervals
+  scan_spec.versions = COL_INTERVAL_SECS / MIN_INTERVAL_SECS
+
+  log.info(startDateTime)
+  log.info(endDateTime)
+  log.info(scan_spec)
+
+  valuesMap = {}
+  metricStep = {}
+  for m in metrics:
+    valuesMap[m] = []
+
+  def processResult(key, family, column, val, ts):
+    its = long(ts) / 10**9L  #nanoseconds -> seconds
+    valuesMap[key].append((its, val))
+
+
+
+  HyperTablePool.doScan(scan_spec, "metrics", processResult)
+
+  # post-fetch processing
+  for m in metrics:
+    # determine step size (its the minimum step found)
+    minStep = end - start
+    sortedVals = sorted(valuesMap[m], key=lambda x: x[0])
+    for i in range(1, len(sortedVals)):
+      step = sortedVals[i][0] - sortedVals[i-1][0]
+      minStep = min(minStep, step)
+
+    minStep = int(minStep)
+    steps = int(end - start) / minStep
+    metricStep[m] = minStep
+
+    # estimation of confidence: length / steps * 100
+
+    # push final values
+    finalValues = [None] * steps
+    for x in sortedVals:
+      bucket = (x[0] - start) / minStep
+      finalValues[bucket] = float(x[1])
+    valuesMap[m] = finalValues
+
+  seriesList = []
+  for m in metrics:
+    series = TimeSeries(removePrefix(m), start, end, metricStep[m], valuesMap[m])
+    series.pathExpression = pathExpr # hack to pass expressions through to render functions
+    seriesList.append(series)
+
+  return seriesList
+
+def fetchDataLocal(requestContext, pathExpr):
   seriesList = []
   startTime = requestContext['startTime']
   endTime = requestContext['endTime']

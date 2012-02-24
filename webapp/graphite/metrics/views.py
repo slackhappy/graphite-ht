@@ -20,6 +20,7 @@ from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
 from graphite.storage import STORE, LOCAL_STORE
 from graphite.metrics.search import searcher
+from graphite.metrics.hypertable_search import hypertable_searcher
 from graphite.render.datalib import CarbonLink
 import fnmatch, os
 
@@ -56,7 +57,9 @@ def search_view(request):
   #if not search_request['query'].endswith('*'):
   #  search_request['query'] += '*'
 
-  results = sorted(searcher.search(**search_request))
+  search_backend = hypertable_searcher or searcher
+
+  results = sorted(search_backend.search(**search_request))
   result_data = json.dumps( dict(metrics=results) )
   return HttpResponse(result_data, mimetype='application/json')
 
@@ -118,6 +121,8 @@ def find_view(request):
     store = LOCAL_STORE
   else:
     store = STORE
+
+  store = hypertable_searcher or store
 
   if format == 'completer':
     query = query.replace('..', '*.')

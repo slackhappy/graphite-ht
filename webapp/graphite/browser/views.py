@@ -17,6 +17,9 @@ from django.shortcuts import render_to_response
 from django.http import HttpResponse
 from django.conf import settings
 from graphite.account.models import Profile
+
+from graphite.hypertable_client import HyperTablePool, addPrefix, removePrefix
+from graphite.metrics.hypertable_search import HyperStore
 from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
 import hashlib
@@ -48,9 +51,23 @@ def browser(request):
     context['target'] = context['target'].replace('#','%23') #js libs terminate a querystring on #
   return render_to_response("browser.html", context) 
 
-
 def search(request):
+  return searchHypertable(request)
+
+def searchHypertable(request):
+  query = addPrefix(request.POST['query'])
+  log.info('query: %s', query)
+  if not query:
+    return HttpResponse("")
+
+  result_string = ','.join(HyperStore().search(query))
+
+  return HttpResponse(result_string, mimetype='text/plain')
+
+
+def searchLocal(request):
   query = request.POST['query']
+  log.info('query: %s', query)
   if not query:
     return HttpResponse("")
 
