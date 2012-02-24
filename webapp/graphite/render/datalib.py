@@ -17,7 +17,8 @@ import struct
 import time
 from django.conf import settings
 from graphite.logger import log
-from graphite.storage import STORE, LOCAL_STORE, HYPERTABLE_CLIENT
+from graphite.storage import STORE, LOCAL_STORE
+from graphite.hypertable_client import HYPERTABLE_CLIENT
 from graphite.render.hashing import ConsistentHashRing
 
 try:
