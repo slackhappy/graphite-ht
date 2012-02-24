@@ -217,6 +217,8 @@ def fetchData(requestContext, pathExpr):
     return fetchDataLocal(requestContext, pathExpr)
 
 EXPANDABLE_PATH_RE = re.compile('.*[\*{}\[\]]+.*')
+def regexifyPathExpr(pathExpr):
+  return '^%s$' % re.sub('\*', '[^\.]+', re.sub('\.', '\.', pathExpr))
 
 def fetchDataFromHyperTable(requestContext, pathExpr):
   if pathExpr.lower().startswith('graphite.'):
