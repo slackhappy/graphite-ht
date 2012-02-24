@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
+import re
 import socket
 import struct
 import time
@@ -211,9 +212,11 @@ CarbonLink = CarbonLinkPool(hosts, settings.CARBONLINK_TIMEOUT)
 # Data retrieval API
 def fetchData(requestContext, pathExpr):
   if HYPERTABLE_CLIENT:
-    fetchDataFromHyperTable(requestContext, pathExpr)
+    return fetchDataFromHyperTable(requestContext, pathExpr)
   else:
-    fetchDataLocal(requestContext, pathExpr)
+    return fetchDataLocal(requestContext, pathExpr)
+
+EXPANDABLE_PATH_RE = re.compile('.*[\*{}\[\]]+.*')
 
 def fetchDataFromHyperTable(requestContext, pathExpr):
   if pathExpr.lower().startswith('graphite.'):
