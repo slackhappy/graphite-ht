@@ -17,7 +17,7 @@ import struct
 import time
 from django.conf import settings
 from graphite.logger import log
-from graphite.storage import STORE, LOCAL_STORE
+from graphite.storage import STORE, LOCAL_STORE, HYPERTABLE_CLIENT
 from graphite.render.hashing import ConsistentHashRing
 
 try:
@@ -207,9 +207,49 @@ for host in settings.CARBONLINK_HOSTS:
 #A shared importable singleton
 CarbonLink = CarbonLinkPool(hosts, settings.CARBONLINK_TIMEOUT)
 
-
 # Data retrieval API
 def fetchData(requestContext, pathExpr):
+  if HYPERTABLE_CLIENT:
+    fetchDataFromHyperTable(requestContext, pathExpr)
+  else:
+    fetchDataLocal(requestContext, pathExpr)
+
+def fetchDataFromHyperTable(requestContext, pathExpr):
+  if pathExpr.lower().startswith('graphite.'):
+    pathExpr = pathExpr[9:]
+
+  startTime = requestContext['startTime'].strftime('%Y-%m-%d %H:%M:%S')
+  endTime = requestContext['endTime'].strftime('%Y-%m-%d %H:%M:%S')
+  start, end, step = timestamp(requestContext['startTime']), timestamp(requestContext['endTime']), 60
+
+  if EXPANDABLE_PATH_RE.match(pathExpr):
+    pathExpr = regexifyPathExpr(pathExpr)
+    query = 'SELECT metric FROM metrics WHERE ROW REGEXP "%s" AND "%s" < TIMESTAMP < "%s"' % (pathExpr, startTime, endTime)
+  else:
+    query = 'SELECT metric FROM metrics WHERE ROW = "%s" AND "%s" < TIMESTAMP < "%s"' % (pathExpr, startTime, endTime)
+
+  log.info('running query: %s' % query)
+  results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
+  log.info('done running query: %s' % query)
+
+  seriesList = []
+  while True:
+    row_data = HYPERTABLE_CLIENT.next_row_as_arrays(results.scanner)
+    if not row_data:
+      break
+    values = []
+    for metric_path, _, _, val, _ in row_data:
+      values.insert(0, float(val))
+
+    series = TimeSeries(metric_path, start, end, step, values)
+    series.pathExpression = pathExpr # hack to pass expressions through to render functions
+    seriesList.append(series)
+
+  HYPERTABLE_CLIENT.close_scanner(results.scanner)
+
+  return seriesList
+
+def fetchDataLocal(requestContext, pathExpr):
   seriesList = []
   startTime = requestContext['startTime']
   endTime = requestContext['endTime']

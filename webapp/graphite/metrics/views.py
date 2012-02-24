@@ -19,7 +19,7 @@ from graphite.account.models import Profile
 from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
 from graphite.storage import STORE, LOCAL_STORE
-from graphite.metrics.search import searcher
+from graphite.metrics.search import searcher, hypertable_searcher
 from graphite.render.datalib import CarbonLink
 import fnmatch, os
 
@@ -118,6 +118,8 @@ def find_view(request):
     store = LOCAL_STORE
   else:
     store = STORE
+
+  store = hypertable_searcher or store
 
   if format == 'completer':
     query = query.replace('..', '*.')
