@@ -20,7 +20,7 @@ class HyperStore:
       pathExpr = regexifyPathExpr(pathExpr)
       return self.findByRegex(pathExpr)
     else:
-      return [query]
+      return [pathExpr]
 
   def findByRegex(self, query): 
     query = 'SELECT * FROM search WHERE ROW REGEXP ".*%s.*"' % (query)
