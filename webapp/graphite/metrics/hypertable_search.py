@@ -17,13 +17,23 @@ def regexifyPathExpr(pathExpr):
 class HyperStore:
   def find(self, pathExpr):
     if EXPANDABLE_PATH_RE.match(pathExpr):
-      pathExpr = regexifyPathExpr(pathExpr)
-      return self.findByRegex(pathExpr)
+      regex = regexifyPathExpr(pathExpr)
+      where = 'ROW REGEXP "%s"' % regex
+
+      starIndex = pathExpr.find('*')
+      if starIndex > 0:
+        where += ' AND ROW =^ "%s"' % pathExpr[0:starIndex]
+
+      return self.findHelper(where)
     else:
       return [pathExpr]
 
-  def findByRegex(self, query): 
-    query = 'SELECT * FROM search WHERE ROW REGEXP "%s"' % (query)
+  def findByRegex(self, regex):
+    where = 'ROW REGEXP "%s"' % regex
+    return self.findHelper(where)
+
+  def findHelper(self, where):
+    query = 'SELECT * FROM search WHERE %s' % (where)
 
     log.info('running query: %s' % query)
     results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
