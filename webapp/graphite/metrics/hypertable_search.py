@@ -23,7 +23,7 @@ class HyperStore:
       return [pathExpr]
 
   def findByRegex(self, query): 
-    query = 'SELECT * FROM search WHERE ROW REGEXP ".*%s.*"' % (query)
+    query = 'SELECT * FROM search WHERE ROW REGEXP "%s"' % (query)
 
     log.info('running query: %s' % query)
     results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
