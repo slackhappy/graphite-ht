@@ -230,9 +230,9 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   where = ' OR '.join(['ROW = "%s"' % m for m in metrics])
   query = 'SELECT metric FROM metrics WHERE (%s) AND "%s" < TIMESTAMP < "%s"' % (where, startTime, endTime)
 
-  log.info('running query: %s' % query)
+  log.info('datalib running query: %s' % query)
   results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
-  log.info('done running query: %s' % query)
+  log.info('datalib done running query: %s' % query)
 
   seriesList = []
   while True:
