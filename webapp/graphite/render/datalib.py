@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
+import array
 import re
 import socket
 import struct
@@ -222,18 +223,31 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   startTime = requestContext['startTime'].strftime('%Y-%m-%d %H:%M:%S')
   endTime = requestContext['endTime'].strftime('%Y-%m-%d %H:%M:%S')
   start, end, step = timestamp(requestContext['startTime']), timestamp(requestContext['endTime']), 60
+  buckets = (end - start) / step
+  log.info('need %d buckets' % buckets)
 
   where = ' OR '.join(['ROW = "%s"' % m for m in metrics])
   query = 'SELECT metric FROM metrics WHERE (%s) AND "%s" < TIMESTAMP < "%s"' % (where, startTime, endTime)
+  log.info(query)
 
+  log.info('making map')
   valuesMap = {}
   for m in metrics:
-    valuesMap[m] = []
+    valuesMap[m] = [0 for x in xrange(0, buckets)]
+  # log.info('made map: %s' % valuesMap)
 
   def processResult(key, family, column, val, ts):
-    valuesMap[key].insert(0, float(val))
+    # its = ts / 1000000000
+    # # bucket = (ts - start) / step
+    # log.info('its')
+    # log.info(its)
+    log.info('ts %s start %s, end %s, step %s' % (ts, start, end, step))
+    # log.info('bucket: %s' % bucket)
+    # valuesMap[key][bucket] = float(val)
 
+  log.info('going')
   HyperTablePool.doQuery(query, processResult)
+  log.info('crazy')
 
   seriesList = []
   for m in metrics:
