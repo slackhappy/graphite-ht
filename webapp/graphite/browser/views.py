@@ -17,7 +17,7 @@ from django.shortcuts import render_to_response
 from django.http import HttpResponse
 from django.conf import settings
 from graphite.account.models import Profile
-from graphite.hypertable_client import HYPERTABLE_CLIENT
+from graphite.hypertable_client import HyperTablePool
 from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
 import hashlib
@@ -60,19 +60,11 @@ def searchHypertable(request):
 
   query = 'SELECT * FROM search WHERE ROW REGEXP ".*%s.*"' % (query)
 
-  log.info('running query: %s' % query)
-  results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
-  log.info('done running query: %s' % query)
-
   metrics = []
-  while True:
-    row_data = HYPERTABLE_CLIENT.next_row_as_arrays(results.scanner)
-    if not row_data:
-      break
-    for metric_path, _, _, val, _ in row_data:
-      metrics.append(metric_path)
+  def processResult(key, family, column, val, ts):
+    metrics.append(key)
 
-  HYPERTABLE_CLIENT.close_scanner(results.scanner)
+  HyperTablePool.doQuery(query, processResult)
   result_string = ','.join(metrics)
   return HttpResponse(result_string, mimetype='text/plain')
 

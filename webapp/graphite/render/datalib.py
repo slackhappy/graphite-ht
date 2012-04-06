@@ -19,7 +19,7 @@ import time
 from django.conf import settings
 from graphite.logger import log
 from graphite.storage import STORE, LOCAL_STORE
-from graphite.hypertable_client import HYPERTABLE_CLIENT
+from graphite.hypertable_client import HyperTablePool
 from graphite.metrics.hypertable_search import HyperStore
 from graphite.render.hashing import ConsistentHashRing
 
@@ -39,7 +39,6 @@ class TimeSeries(list):
     self.consolidationFunc = consolidate
     self.valuesPerPoint = 1
     self.options = {}
-
 
   def __iter__(self):
     if self.valuesPerPoint > 1:
@@ -212,10 +211,7 @@ CarbonLink = CarbonLinkPool(hosts, settings.CARBONLINK_TIMEOUT)
 
 # Data retrieval API
 def fetchData(requestContext, pathExpr):
-  if HYPERTABLE_CLIENT:
-    return fetchDataFromHyperTable(requestContext, pathExpr)
-  else:
-    return fetchDataLocal(requestContext, pathExpr)
+  return fetchDataFromHyperTable(requestContext, pathExpr)
 
 def fetchDataFromHyperTable(requestContext, pathExpr):
   if pathExpr.lower().startswith('graphite.'):
@@ -230,24 +226,20 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   where = ' OR '.join(['ROW = "%s"' % m for m in metrics])
   query = 'SELECT metric FROM metrics WHERE (%s) AND "%s" < TIMESTAMP < "%s"' % (where, startTime, endTime)
 
-  log.info('datalib running query: %s' % query)
-  results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
-  log.info('datalib done running query: %s' % query)
+  valuesMap = {}
+  for m in metrics:
+    valuesMap[m] = []
+
+  def processResult(key, family, column, val, ts):
+    valuesMap[key].insert(0, float(val))
+
+  HyperTablePool.doQuery(query, processResult)
 
   seriesList = []
-  while True:
-    row_data = HYPERTABLE_CLIENT.next_row_as_arrays(results.scanner)
-    if not row_data:
-      break
-    values = []
-    for metric_path, _, _, val, _ in row_data:
-      values.insert(0, float(val))
-
-    series = TimeSeries(metric_path, start, end, step, values)
+  for m in metrics:
+    series = TimeSeries(m, start, end, step, valuesMap[m])
     series.pathExpression = pathExpr # hack to pass expressions through to render functions
     seriesList.append(series)
-
-  HYPERTABLE_CLIENT.close_scanner(results.scanner)
 
   return seriesList
 

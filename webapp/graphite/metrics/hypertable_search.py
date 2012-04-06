@@ -6,7 +6,7 @@ from django.conf import settings
 from graphite.logger import log
 import re
 
-from graphite.hypertable_client import HYPERTABLE_CLIENT
+from graphite.hypertable_client import HyperTablePool
 
 EXPANDABLE_PATH_RE = re.compile('.*[\*{}\[\]]+.*')
 def regexifyPathExpr(pathExpr):
@@ -35,19 +35,12 @@ class HyperStore:
   def findHelper(self, where):
     query = 'SELECT * FROM search WHERE %s' % (where)
 
-    log.info('running query: %s' % query)
-    results = HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
-    log.info('done running query: %s' % query)
-
     metrics = []
-    while True:
-      row_data = HYPERTABLE_CLIENT.next_row_as_arrays(results.scanner)
-      if not row_data:
-        break
-      for metric_path, _, _, val, _ in row_data:
-        metrics.append(metric_path)
-    return metrics
+    def processResult(key, family, column, val, ts):
+      metrics.append(key)
 
+    HyperTablePool.doQuery(query, processResult)
+    return metrics
 
 class HyperNode:
   context = {}
@@ -65,7 +58,6 @@ class HyperTableIndexSearcher:
   def search(self, query, max_results=None, keep_query_pattern=False):
     query_parts = query.split('.')
     metrics_found = set()
-    log.info("query_parts: %s" % query_parts)
 
   def find(self, query):
     query_parts = query.split('.')
@@ -73,22 +65,12 @@ class HyperTableIndexSearcher:
     pattern = '.'.join(query_parts[0:-1]) + '|'
     query = 'SELECT * FROM tree WHERE row =^ "%s"' % pattern
 
-    log.info('running query: %s' % query)
-    results =  HYPERTABLE_CLIENT.hql_exec2(HYPERTABLE_CLIENT.namespace_open('monitor'), query, 0, 1)
-    log.info('done running query: %s' % query)
-
     nodes = []
-    while True:
-      row_data = HYPERTABLE_CLIENT.next_row_as_arrays(results.scanner)
-      if not row_data:
-        break
-      for key, family, column, val, ts in row_data:
-        if column == 'has_children':
-          nodes.append(HyperNode(key.replace('|', '.'), val == '0'))
+    def processResult(key, family, column, val, ts):
+      if column == 'has_children':
+        nodes.append(HyperNode(key.replace('|', '.'), val == '0'))
 
-    HYPERTABLE_CLIENT.close_scanner(results.scanner)
+    HyperTablePool.doQuery(query, processResult)
     return nodes
 
-hypertable_searcher = None
-if HYPERTABLE_CLIENT:
-  hypertable_searcher = HyperTableIndexSearcher()
+hypertable_searcher = HyperTableIndexSearcher()

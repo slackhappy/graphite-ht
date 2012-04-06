@@ -46,6 +46,7 @@ class EvalThread (threading.Thread):
   def __init__(self, requestContext, target):
     self.requestContext = requestContext
     self.target = target
+    self.seriesList = []
     threading.Thread.__init__(self)
 
   def run(self):
@@ -55,7 +56,6 @@ class EvalThread (threading.Thread):
 
   def getSeriesList(self):
     return self.seriesList
-
 
 def renderView(request):
   start = time()
