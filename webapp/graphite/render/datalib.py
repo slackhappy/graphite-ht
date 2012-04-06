@@ -234,16 +234,13 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   valuesMap = {}
   for m in metrics:
     valuesMap[m] = [0 for x in xrange(0, buckets)]
-  # log.info('made map: %s' % valuesMap)
 
   def processResult(key, family, column, val, ts):
-    its = ts / 1000000000
-    # bucket = (ts - start) / step
-    log.info('its')
-    log.info(its)
-    log.info('ts %s start %s, end %s, step %s' % (ts, start, end, step))
-    # log.info('bucket: %s' % bucket)
-    # valuesMap[key][bucket] = float(val)
+    its = long(ts) / 1000000000L
+    bucket = int((its - start) / step)
+    log.info('ts %s --> %s start %s, end %s, step %s INTO bucket %s' % (ts, its, start, end, step, bucket))
+    if bucket >= 0 or bucket < buckets:
+      valuesMap[key][bucket] = float(val)
 
   log.info('going')
   HyperTablePool.doQuery(query, processResult)
