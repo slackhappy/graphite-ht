@@ -237,10 +237,10 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   # log.info('made map: %s' % valuesMap)
 
   def processResult(key, family, column, val, ts):
-    # its = ts / 1000000000
-    # # bucket = (ts - start) / step
-    # log.info('its')
-    # log.info(its)
+    its = ts / 1000000000
+    # bucket = (ts - start) / step
+    log.info('its')
+    log.info(its)
     log.info('ts %s start %s, end %s, step %s' % (ts, start, end, step))
     # log.info('bucket: %s' % bucket)
     # valuesMap[key][bucket] = float(val)
