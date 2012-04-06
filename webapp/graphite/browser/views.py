@@ -17,7 +17,8 @@ from django.shortcuts import render_to_response
 from django.http import HttpResponse
 from django.conf import settings
 from graphite.account.models import Profile
-from graphite.hypertable_client import HyperTablePool
+
+from graphite.hypertable_client import HyperTablePool, addPrefix, removePrefix
 from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
 import hashlib
@@ -53,7 +54,7 @@ def search(request):
   return searchHypertable(request)
 
 def searchHypertable(request):
-  query = request.POST['query']
+  query = addPrefix(request.POST['query'])
   log.info('query: %s', query)
   if not query:
     return HttpResponse("")
@@ -62,7 +63,7 @@ def searchHypertable(request):
 
   metrics = []
   def processResult(key, family, column, val, ts):
-    metrics.append(key)
+    metrics.append(removePrefix(key))
 
   HyperTablePool.doQuery(query, processResult)
   result_string = ','.join(metrics)

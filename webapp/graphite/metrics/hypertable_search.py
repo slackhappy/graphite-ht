@@ -3,6 +3,7 @@ import time
 import subprocess
 import os.path
 from django.conf import settings
+from graphite.hypertable_client import removePrefix, addPrefix
 from graphite.logger import log
 import re
 
@@ -12,10 +13,10 @@ EXPANDABLE_PATH_RE = re.compile('.*[\*{}\[\]]+.*')
 def regexifyPathExpr(pathExpr):
   return '^%s$' % re.sub('\*', '[^\.]+', re.sub('\.', '\.', pathExpr))
 
-# SELECT * FROM metrics WHERE (ROW = "x" OR ROW = "y") REVS 1;
-
 class HyperStore:
   def find(self, pathExpr):
+    pathExpr = pathExpr
+    log.info('searching for: %s' % pathExpr)
     if EXPANDABLE_PATH_RE.match(pathExpr):
       regex = regexifyPathExpr(pathExpr)
       where = 'ROW REGEXP "%s"' % regex
@@ -24,9 +25,10 @@ class HyperStore:
       if starIndex > 0:
         where += ' AND ROW =^ "%s"' % pathExpr[0:starIndex]
 
-      return self.findHelper(where)
+      log.info('where: %s' % where)
+      return [removePrefix(p) for p in self.findHelper(where)]
     else:
-      return [pathExpr]
+      return [removePrefix(pathExpr)]
 
   def findByRegex(self, regex):
     where = 'ROW REGEXP "%s"' % regex
@@ -60,10 +62,12 @@ class HyperTableIndexSearcher:
     metrics_found = set()
 
   def find(self, query):
+    query = addPrefix(query)
     query_parts = query.split('.')
   
     pattern = '.'.join(query_parts[0:-1]) + '|'
     query = 'SELECT * FROM tree WHERE row =^ "%s"' % pattern
+    log.info('find query: %s' % query)
 
     nodes = []
     def processResult(key, family, column, val, ts):

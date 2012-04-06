@@ -20,7 +20,7 @@ import time
 from django.conf import settings
 from graphite.logger import log
 from graphite.storage import STORE, LOCAL_STORE
-from graphite.hypertable_client import HyperTablePool
+from graphite.hypertable_client import HyperTablePool, removePrefix, addPrefix
 from graphite.metrics.hypertable_search import HyperStore
 from graphite.render.hashing import ConsistentHashRing
 
@@ -218,37 +218,36 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   if pathExpr.lower().startswith('graphite.'):
     pathExpr = pathExpr[9:]
 
-  metrics = HyperStore().find(pathExpr)
+  pathExpr = addPrefix(pathExpr)
+  metrics = [addPrefix(m) for m in HyperStore().find(pathExpr)]
 
   startTime = requestContext['startTime'].strftime('%Y-%m-%d %H:%M:%S')
   endTime = requestContext['endTime'].strftime('%Y-%m-%d %H:%M:%S')
-  start, end, step = timestamp(requestContext['startTime']), timestamp(requestContext['endTime']), 60
+  start, end, step = timestamp(requestContext['startTime']), timestamp(requestContext['endTime']), 10
   buckets = (end - start) / step
-  log.info('need %d buckets' % buckets)
 
   where = ' OR '.join(['ROW = "%s"' % m for m in metrics])
   query = 'SELECT metric FROM metrics WHERE (%s) AND "%s" < TIMESTAMP < "%s"' % (where, startTime, endTime)
   log.info(query)
 
-  log.info('making map')
   valuesMap = {}
   for m in metrics:
-    valuesMap[m] = [0 for x in xrange(0, buckets)]
+    valuesMap[m] = [None for x in xrange(0, buckets)]
 
   def processResult(key, family, column, val, ts):
     its = long(ts) / 1000000000L
     bucket = int((its - start) / step)
-    log.info('ts %s --> %s start %s, end %s, step %s INTO bucket %s' % (ts, its, start, end, step, bucket))
     if bucket >= 0 or bucket < buckets:
-      valuesMap[key][bucket] = float(val)
+      if valuesMap[key][bucket]:
+        valuesMap[key][bucket] = float(val)
+      else:
+        valuesMap[key][bucket] = float(val)
 
-  log.info('going')
   HyperTablePool.doQuery(query, processResult)
-  log.info('crazy')
 
   seriesList = []
   for m in metrics:
-    series = TimeSeries(m, start, end, step, valuesMap[m])
+    series = TimeSeries(removePrefix(m), start, end, step, valuesMap[m])
     series.pathExpression = pathExpr # hack to pass expressions through to render functions
     seriesList.append(series)
 

@@ -4,6 +4,21 @@ from django.conf import settings
 from graphite.logger import log
 import hypertable.thriftclient
 import threading
+import re
+
+def removePrefix(path):
+  if settings.HYPERTABLE_PREFIX:
+    log.info(path)
+    log.info(settings.HYPERTABLE_PREFIX)
+    return re.sub('^%s\.' % settings.HYPERTABLE_PREFIX, '', path)
+  else:
+    return path
+
+def addPrefix(path):
+  if settings.HYPERTABLE_PREFIX:
+    return '%s.%s' % (settings.HYPERTABLE_PREFIX, path)
+  else:
+    return path
 
 class ConnectionPool:
   def makeClient(self):
