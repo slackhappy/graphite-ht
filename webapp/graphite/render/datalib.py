@@ -226,9 +226,22 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
   start, end, step = timestamp(requestContext['startTime']), timestamp(requestContext['endTime']), 10
   buckets = (end - start) / step
 
+  nanosStart = start * 10**9
+  nanosEnd = end * 10**9
+
+  scan_spec = ScanSpec(None, None, None, 1)
+  scan_spec.start_time = nanosStart
+  scan_spec.end_time = nanosEnd
+  intervals = [RowInterval(m, True, m, True) for m in metrics]
+  columns = ['metric']
+  print intervals
+  scan_spec.row_intervals = intervals
+
   where = ' OR '.join(['ROW = "%s"' % m for m in metrics])
   query = 'SELECT metric FROM metrics WHERE (%s) AND "%s" < TIMESTAMP < "%s"' % (where, startTime, endTime)
   log.info(query)
+  log.info(intervals)
+  log.info(scan_spec)
 
   valuesMap = {}
   for m in metrics:
@@ -242,6 +255,9 @@ def fetchDataFromHyperTable(requestContext, pathExpr):
         valuesMap[key][bucket] = float(val)
       else:
         valuesMap[key][bucket] = float(val)
+
+  client.scanner_open("monitor", "metrics", scan_spec);
+
 
   HyperTablePool.doQuery(query, processResult)
 
