@@ -11,7 +11,8 @@ from graphite.hypertable_client import HyperTablePool
 
 EXPANDABLE_PATH_RE = re.compile('.*[\*{}\[\]]+.*')
 def regexifyPathExpr(pathExpr):
-  return '^%s$' % re.sub('\*', '[^\.]+', re.sub('\.', '\.', pathExpr))
+  return pathExpr.replace('+', '\\+').replace('.', '\\.').replace('*', '[^\.]')
+
 
 class HyperStore:
   def find(self, pathExpr):

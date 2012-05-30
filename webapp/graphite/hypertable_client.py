@@ -60,7 +60,7 @@ class ConnectionPool:
       conn.close_scanner(scanner)
       self.releaseConn(conn)
       log.info(spec)
-      log.info('fetch time: %s' % (time.time() - start))
+      log.info('scan-fetch time: %s' % (time.time() - start))
 
 
 
@@ -85,6 +85,6 @@ class ConnectionPool:
       conn.close_scanner(results.scanner)
       self.releaseConn(conn)
       log.info(query)
-      log.info('fetch time: %s' % (time.time() - start))
+      log.info('query-fetch time: %s' % (time.time() - start))
 
 HyperTablePool = ConnectionPool(20)
